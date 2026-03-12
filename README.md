@@ -69,8 +69,8 @@ project/
 ├── server.py       # Multi-threaded server (Control Plane + Data Plane + Reporter)
 ├── client.py       # Client (SSL handshake → UDP telemetry stream)
 ├── protocol.py     # Packet encode/decode (struct + JSON)
-├── server.crt      # SSL certificate (generated — not committed to Git)
-├── server.key      # SSL private key  (generated — not committed to Git)
+├── server.crt      # SSL certificate (generated)
+├── server.key      # SSL private key  (generated)
 └── README.md
 ```
 
