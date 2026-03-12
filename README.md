@@ -1,5 +1,5 @@
 # Telemetry Collection and Aggregation System
-**Team 6 — Socket Programming Mini Project**
+**Team 6 - Socket Programming Mini Project**
 
 ---
 
@@ -85,7 +85,7 @@ project/
 
 ## Setup and Run
 
-### Step 1 — Generate SSL Certificate (one time only)
+### Step 1 - Generate SSL Certificate (one time only)
 
 ```bash
 openssl req -new -newkey rsa:2048 -days 365 -nodes -x509 \
