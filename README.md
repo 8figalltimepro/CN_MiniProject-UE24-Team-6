@@ -200,24 +200,3 @@ Columns explained:
 | One-Way Latency | Timestamp embedded in packet header; delta computed on receipt |
 | Throughput (PPS) | 1-second sliding window packet counter per client |
 | Scalability | Run 3+ clients simultaneously; all tracked independently |
-
----
-
-## Design Decisions
-
-| Decision | Reason |
-|---|---|
-| TCP for control plane | Reliable delivery required for authentication |
-| UDP for data plane | Low overhead suits high-rate telemetry; loss is expected and tracked |
-| Same port (8888) for TCP and UDP | OS disambiguates by socket type; simplifies firewall rules for demo |
-| Binary header + JSON payload | Fixed-size header enables fast parsing; JSON keeps payload human-readable |
-| `ssl.CERT_NONE` on client | Server uses a self-signed cert; disabled only for this local demo |
-| Threading (not async) | Keeps code explicit and easy to follow for academic evaluation |
-
----
-
-## Known Limitations
-
-- `ssl.CERT_NONE` on the client means certificate authenticity is not verified - acceptable for a self-signed demo cert, not for production.
-- One-way latency measurement assumes both client and server share the same system clock (true on localhost).
-- No persistent storage - all statistics reset when the server restarts.
