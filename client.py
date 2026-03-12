@@ -1,8 +1,8 @@
 """
 client.py — Telemetry Client
-==============================
+
 1. Performs an SSL/TLS handshake over TCP to authenticate with the server.
-2. Streams UDP telemetry packets at ~10 packets/second after authentication.
+2. Streams UDP telemetry packets at ~10 pps after authentication.
 
 Usage:
     python3 client.py <client_id> [--loss 0.0-1.0]
@@ -20,34 +20,26 @@ import sys
 import argparse
 import protocol
 
-# ---------------------------------------------------------------------------
 # Configuration
-# ---------------------------------------------------------------------------
 SERVER_IP   = '127.0.0.1'
 PORT        = 8888
 SEND_RATE   = 0.1   # seconds between packets (10 pps)
 MAX_RETRIES = 3     # SSL handshake retry attempts
 
 
-# ---------------------------------------------------------------------------
-# Step 1 — Secure SSL/TLS Handshake (TCP)
-# ---------------------------------------------------------------------------
+
+# Step 1 - Secure SSL/TLS Handshake (TCP)
 def secure_handshake(client_id):
     """
     Opens a TCP connection to the server, wraps it in SSL/TLS,
     and performs a simple challenge-response authentication.
 
-    Note on SSL verification:
-        CERT_NONE and check_hostname=False are used intentionally
-        because the server uses a self-signed certificate for this demo.
-        In production, load the CA cert and set verify_mode=CERT_REQUIRED.
-
     Returns:
         bool: True if authentication succeeded, False otherwise.
     """
     context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
-    context.check_hostname = False      # Self-signed cert — no hostname in SAN
-    context.verify_mode   = ssl.CERT_NONE  # Accept self-signed for demo
+    context.check_hostname = False 
+    context.verify_mode   = ssl.CERT_NONE
 
     for attempt in range(1, MAX_RETRIES + 1):
         print(f"[*] Client {client_id}: SSL/TLS handshake attempt {attempt}/{MAX_RETRIES}...")
@@ -89,9 +81,9 @@ def secure_handshake(client_id):
     return False
 
 
-# ---------------------------------------------------------------------------
+
 # Step 2 — UDP Telemetry Stream
-# ---------------------------------------------------------------------------
+
 def start_telemetry(client_id, loss_rate):
     """
     Continuously sends binary telemetry packets over UDP.
@@ -136,9 +128,9 @@ def start_telemetry(client_id, loss_rate):
         udp_sock.close()
 
 
-# ---------------------------------------------------------------------------
+
 # Entry Point
-# ---------------------------------------------------------------------------
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Telemetry client — authenticates via SSL/TLS then streams UDP data."
