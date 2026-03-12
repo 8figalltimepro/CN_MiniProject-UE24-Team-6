@@ -78,7 +78,7 @@ project/
 
 ## Requirements
 
-- Python 3.8 or higher (standard library only — no pip installs needed)
+- Python 3.8 or higher
 - OpenSSL (for certificate generation)
 
 ---
