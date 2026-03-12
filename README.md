@@ -218,6 +218,6 @@ Columns explained:
 
 ## Known Limitations
 
-- `ssl.CERT_NONE` on the client means certificate authenticity is not verified — acceptable for a self-signed demo cert, not for production.
+- `ssl.CERT_NONE` on the client means certificate authenticity is not verified - acceptable for a self-signed demo cert, not for production.
 - One-way latency measurement assumes both client and server share the same system clock (true on localhost).
-- No persistent storage — all statistics reset when the server restarts.
+- No persistent storage - all statistics reset when the server restarts.
