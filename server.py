@@ -1,6 +1,6 @@
 """
 server.py — Telemetry Collection and Aggregation Server
-========================================================
+
 Runs three concurrent threads:
   1. Secure Control Plane  : SSL/TLS TCP server — authenticates clients.
   2. Data Plane            : UDP server — ingests high-rate telemetry packets.
@@ -14,18 +14,18 @@ import time
 import protocol
 from collections import defaultdict
 
-# ---------------------------------------------------------------------------
+
 # Configuration
-# ---------------------------------------------------------------------------
+
 HOST      = '0.0.0.0'
 PORT      = 8888
 CERT_FILE = "server.crt"
 KEY_FILE  = "server.key"
-REPORT_INTERVAL = 5  # seconds between aggregation reports
+REPORT_INTERVAL = 5
 
-# ---------------------------------------------------------------------------
+
 # Shared State  (protected by a lock for thread safety)
-# ---------------------------------------------------------------------------
+
 stats_lock = threading.Lock()
 
 def _default_stats():
@@ -44,9 +44,9 @@ def _default_stats():
 client_stats = defaultdict(_default_stats)
 
 
-# ---------------------------------------------------------------------------
+
 # Thread 1 — Secure Control Plane (SSL/TLS over TCP)
-# ---------------------------------------------------------------------------
+
 def handle_secure_control_plane():
     """
     Listens for TCP connections and performs a minimal SSL/TLS handshake.
@@ -98,9 +98,9 @@ def handle_secure_control_plane():
             print(f"[!] Control plane error from {addr[0]}: {e}")
 
 
-# ---------------------------------------------------------------------------
+
 # Thread 2 — Data Plane (UDP Telemetry Ingestion)
-# ---------------------------------------------------------------------------
+
 def handle_data_plane():
     """
     Ingests UDP telemetry packets.
@@ -138,7 +138,7 @@ def handle_data_plane():
         with stats_lock:
             s = client_stats[cid]
 
-            # ── Sequence Tracking & Loss Detection ──────────────────────────
+            # Sequence Tracking & Loss Detection
             if s['expected_seq'] is None:
                 # First packet from this client — use its seq as baseline
                 s['expected_seq'] = seq
@@ -155,14 +155,14 @@ def handle_data_plane():
             s['received']     += 1
             s['expected_seq']  = seq + 1
 
-            # ── Latency Measurement ─────────────────────────────────────────
-            # One-way latency is approximate (assumes clocks are in sync on localhost)
+            # Latency Measurement
+            # One-way latency
             latency_ms = (recv_time - ts) * 1000.0
-            if latency_ms >= 0:  # Ignore negative values from clock skew
+            if latency_ms >= 0:
                 s['latency_sum_ms'] += latency_ms
                 s['latency_count']  += 1
 
-            # ── Throughput Window (packets per second) ──────────────────────
+            # Throughput Window (packets per second)
             if s['window_start'] is None:
                 s['window_start']   = recv_time
                 s['window_packets'] = 1
@@ -175,9 +175,9 @@ def handle_data_plane():
                     s['window_packets'] = 0
 
 
-# ---------------------------------------------------------------------------
+
 # Thread 3 — Aggregation Reporter
-# ---------------------------------------------------------------------------
+
 def print_aggregation_report():
     """Prints a formatted per-client statistics table every REPORT_INTERVAL seconds."""
     while True:
@@ -208,9 +208,8 @@ def print_aggregation_report():
         print("=" * w + "\n")
 
 
-# ---------------------------------------------------------------------------
+
 # Entry Point
-# ---------------------------------------------------------------------------
 if __name__ == "__main__":
     print("[*] Starting Telemetry Collection and Aggregation Server...")
     print(f"[*] Host: {HOST}  |  Port: {PORT}  |  Protocol: TCP (control) + UDP (data)")
