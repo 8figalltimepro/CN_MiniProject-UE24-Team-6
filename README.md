@@ -85,19 +85,67 @@ project/
 
 ## Setup and Run
 
-### Step 1 - Generate SSL Certificate (one time only)
+### Step 1 — Generate SSL Certificate (one-time, on the **Server** machine)
 
 ```bash
 openssl req -new -newkey rsa:2048 -days 365 -nodes -x509 \
   -keyout server.key -out server.crt \
-  -subj "/C=US/ST=Demo/L=Lab/O=Project/CN=localhost"
+  -subj "/C=IN/ST=Demo/L=Lab/O=Project/CN=telemetry-server"
 ```
 
-This creates `server.crt` and `server.key` in the current directory.
+This creates `server.crt` and `server.key`. Copy **both files along with `server.py` and `protocol.py`** to the Server machine.
+Copy **`client.py` and `protocol.py`** to the Client machine (the cert files are NOT needed on the client — `CERT_NONE` is used).
 
-### Step 2 — Start the Server
+---
 
-Open **Terminal 1**:
+### Step 2 — Connect both computers to the **same hotspot**
+
+Both the Server machine and the Client machine must be connected to the same Wi-Fi / mobile hotspot.
+
+#### Find the Server machine's LAN IP address
+
+**macOS / Linux:**
+```bash
+ifconfig | grep "inet " | grep -v 127.0.0.1
+# or
+ip -4 addr show | grep inet
+```
+
+**Windows:**
+```cmd
+ipconfig
+# Look for the "IPv4 Address" under your Wi-Fi adapter
+```
+
+The IP will look like `192.168.x.x` or `10.x.x.x`. Note it — you'll need it on the Client.
+
+---
+
+### Step 3 — (macOS / Linux) Allow port 8888 through the firewall
+
+**macOS** — if the macOS firewall is on, either temporarily disable it or add an exception:
+```bash
+# Allow python3 through the firewall (run once, requires sudo)
+sudo /usr/libexec/ApplicationFirewall/socketfilterfw --add $(which python3)
+sudo /usr/libexec/ApplicationFirewall/socketfilterfw --unblock $(which python3)
+```
+
+**Linux (ufw):**
+```bash
+sudo ufw allow 8888/tcp
+sudo ufw allow 8888/udp
+```
+
+**Windows** — allow Python through Windows Defender Firewall when prompted, or run:
+```cmd
+netsh advfirewall firewall add rule name="Telemetry 8888" protocol=TCP dir=in localport=8888 action=allow
+netsh advfirewall firewall add rule name="Telemetry 8888" protocol=UDP dir=in localport=8888 action=allow
+```
+
+---
+
+### Step 4 — Start the Server (on the **Server** machine)
+
 ```bash
 python3 server.py
 ```
@@ -110,40 +158,56 @@ Expected output:
 [*] Data Plane (UDP Telemetry) listening on UDP 8888
 ```
 
-### Step 3 — Run a Client
+The server binds to `0.0.0.0` — it listens on **all** network interfaces, including the hotspot interface.
 
-Open **Terminal 2**:
+---
+
+### Step 5 — Run a Client (on the **Client** machine)
+
+Replace `192.168.1.10` with the **actual LAN IP** of the Server machine from Step 2.
+
 ```bash
-python3 client.py 101
+python3 client.py 101 --server 192.168.1.10
 ```
 
 Expected output:
 ```
-[*] Client 101: SSL/TLS handshake attempt 1/3...
+[*] Server target : 192.168.1.10:8888
+[*] Client ID     : 101
+[*] Simulated loss: 0%
+--------------------------------------------------
+[*] Client 101: SSL/TLS handshake attempt 1/3 → 192.168.1.10:8888
 [+] Client 101: SSL/TLS Handshake Successful. Authorised.
-[*] Client 101: Starting UDP telemetry (rate ~10 pps, simulated loss 0%)
+[*] Client 101: Starting UDP telemetry → 192.168.1.10:8888  (rate ~10 pps, simulated loss 0%)
+```
+
+On the **Server** terminal you should see:
+```
+[+] Client 101 authenticated via SSL/TLS from 192.168.x.x
 ```
 
 ---
 
 ## Demo Guide (Evaluator Walkthrough)
 
+> **In all demo commands below, replace `192.168.1.10` with the actual LAN IP of the Server machine.**
+
 ### Demo 1 — SSL/TLS Authentication
-**Terminal 2:**
+**Client machine — Terminal 1:**
 ```bash
-python3 client.py 101
+python3 client.py 101 --server 192.168.1.10
 ```
-- Client performs SSL/TLS handshake over TCP.
-- Server prints: `[+] Client 101 authenticated via SSL/TLS`
-- Client prints: `SSL/TLS Handshake Successful. Authorised.`
-- **Demonstrates:** Security deliverable (SSL/TLS).
+- Client performs SSL/TLS handshake over TCP across the two machines.
+- **Server** prints: `[+] Client 101 authenticated via SSL/TLS from <client-LAN-IP>`
+- **Client** prints: `SSL/TLS Handshake Successful. Authorised.`
+- **Demonstrates:** Security deliverable (SSL/TLS) across a real network link.
 
 ---
 
 ### Demo 2 — Packet Loss Detection
-**Terminal 3:**
+**Client machine — Terminal 2** (or a second terminal on the same client machine):
 ```bash
-python3 client.py 202 --loss 0.2
+python3 client.py 202 --server 192.168.1.10 --loss 0.2
 ```
 - Client randomly drops ~20% of packets before sending.
 - Client prints: `[~] Client 202: Simulated drop — seq <N>`
@@ -154,11 +218,11 @@ python3 client.py 202 --loss 0.2
 ---
 
 ### Demo 3 — Scalability / Multiple Concurrent Clients
-**Terminal 4:**
+**Client machine — Terminal 3:**
 ```bash
-python3 client.py 303
+python3 client.py 303 --server 192.168.1.10
 ```
-- Server now aggregates data for 3 simultaneous clients.
+- Server now aggregates data for 3 simultaneous clients originating from different processes.
 - Each client independently tracked in the report.
 - **Demonstrates:** Multiple distributed clients deliverable.
 

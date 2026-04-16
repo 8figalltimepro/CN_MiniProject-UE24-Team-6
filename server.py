@@ -1,12 +1,3 @@
-"""
-server.py — Telemetry Collection and Aggregation Server
-
-Runs three concurrent threads:
-  1. Secure Control Plane  : SSL/TLS TCP server — authenticates clients.
-  2. Data Plane            : UDP server — ingests high-rate telemetry packets.
-  3. Aggregation Reporter  : Prints per-client statistics every 5 seconds.
-"""
-
 import socket
 import ssl
 import threading
@@ -14,18 +5,14 @@ import time
 import protocol
 from collections import defaultdict
 
-
-# Configuration
-
+# Config
 HOST      = '0.0.0.0'
 PORT      = 8888
 CERT_FILE = "server.crt"
 KEY_FILE  = "server.key"
 REPORT_INTERVAL = 5
 
-
-# Shared State  (protected by a lock for thread safety)
-
+# State
 stats_lock = threading.Lock()
 
 def _default_stats():
@@ -35,7 +22,7 @@ def _default_stats():
         'expected_seq'    : None,   # None = waiting for first packet
         'latency_sum_ms'  : 0.0,    # cumulative one-way latency (ms)
         'latency_count'   : 0,
-        'window_start'    : None,   # start of current 1-second throughput window
+        'window_start'    : None,   # start of current 1 second throughput window
         'window_packets'  : 0,      # packets received in current window
         'throughput_pps'  : 0.0,    # last measured packets-per-second
         'malformed'       : 0,
@@ -43,15 +30,8 @@ def _default_stats():
 
 client_stats = defaultdict(_default_stats)
 
-
-
-# Thread 1 — Secure Control Plane (SSL/TLS over TCP)
-
+# Control Plane
 def handle_secure_control_plane():
-    """
-    Listens for TCP connections and performs a minimal SSL/TLS handshake.
-    On success sends AUTH_OK; client may then start the UDP data stream.
-    """
     context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
     try:
         context.load_cert_chain(certfile=CERT_FILE, keyfile=KEY_FILE)
@@ -99,16 +79,8 @@ def handle_secure_control_plane():
 
 
 
-# Thread 2 — Data Plane (UDP Telemetry Ingestion)
-
+# Data Plane
 def handle_data_plane():
-    """
-    Ingests UDP telemetry packets.
-    For each valid packet updates:
-      - Sequence tracking and loss detection
-      - One-way latency (packet timestamp vs server receive time)
-      - Throughput window (packets per second)
-    """
     udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     udp_sock.bind((HOST, PORT))
     print(f"[*] Data Plane (UDP Telemetry) listening on UDP {PORT}")
@@ -124,9 +96,7 @@ def handle_data_plane():
         pkt = protocol.parse_packet(raw_data)
 
         if pkt is None:
-            # Malformed packet — log and continue; do not crash
             print(f"[!] Malformed/invalid packet received from {addr[0]}, discarding.")
-            # We don't know which client sent it, so tally under a generic key
             with stats_lock:
                 client_stats['UNKNOWN']['malformed'] += 1
             continue
@@ -138,31 +108,24 @@ def handle_data_plane():
         with stats_lock:
             s = client_stats[cid]
 
-            # Sequence Tracking & Loss Detection
             if s['expected_seq'] is None:
-                # First packet from this client — use its seq as baseline
                 s['expected_seq'] = seq
 
             if seq > s['expected_seq']:
-                # Gap detected: packets between expected and current are lost
                 lost_count = seq - s['expected_seq']
                 s['lost'] += lost_count
 
             elif seq < s['expected_seq']:
-                # Late/duplicate packet — do not update expected
                 pass
 
             s['received']     += 1
             s['expected_seq']  = seq + 1
 
-            # Latency Measurement
-            # One-way latency
             latency_ms = (recv_time - ts) * 1000.0
             if latency_ms >= 0:
                 s['latency_sum_ms'] += latency_ms
                 s['latency_count']  += 1
 
-            # Throughput Window (packets per second)
             if s['window_start'] is None:
                 s['window_start']   = recv_time
                 s['window_packets'] = 1
@@ -176,10 +139,8 @@ def handle_data_plane():
 
 
 
-# Thread 3 — Aggregation Reporter
-
+# Reporter
 def print_aggregation_report():
-    """Prints a formatted per-client statistics table every REPORT_INTERVAL seconds."""
     while True:
         time.sleep(REPORT_INTERVAL)
 
@@ -209,7 +170,7 @@ def print_aggregation_report():
 
 
 
-# Entry Point
+
 if __name__ == "__main__":
     print("[*] Starting Telemetry Collection and Aggregation Server...")
     print(f"[*] Host: {HOST}  |  Port: {PORT}  |  Protocol: TCP (control) + UDP (data)")
@@ -224,6 +185,6 @@ if __name__ == "__main__":
     t3.start()
 
     try:
-        t1.join()   # Block main thread; server runs until Ctrl+C
+        t1.join()
     except KeyboardInterrupt:
         print("\n[*] Server shutting down.")
