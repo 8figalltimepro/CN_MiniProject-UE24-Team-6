@@ -1,17 +1,3 @@
-"""
-client.py — Telemetry Client
-
-1. Performs an SSL/TLS handshake over TCP to authenticate with the server.
-2. Streams UDP telemetry packets at ~10 pps after authentication.
-
-Usage:
-    python3 client.py <client_id> [--loss 0.0-1.0]
-
-Example:
-    python3 client.py 101              # No simulated packet loss
-    python3 client.py 202 --loss 0.2   # 20% simulated packet loss
-"""
-
 import socket
 import ssl
 import time
@@ -20,36 +6,29 @@ import sys
 import argparse
 import protocol
 
-# Configuration
-SERVER_IP   = '127.0.0.1'
-PORT        = 8888
-SEND_RATE   = 0.1   # seconds between packets (10 pps)
-MAX_RETRIES = 3     # SSL handshake retry attempts
+# Defaults (overridable via CLI arguments)
+DEFAULT_SERVER_IP = '127.0.0.1'
+DEFAULT_PORT      = 8888
+SEND_RATE         = 0.1   # seconds between packets  →  ~10 packets/sec
+MAX_RETRIES       = 3
 
 
 
-# Step 1 - Secure SSL/TLS Handshake (TCP)
-def secure_handshake(client_id):
-    """
-    Opens a TCP connection to the server, wraps it in SSL/TLS,
-    and performs a simple challenge-response authentication.
-
-    Returns:
-        bool: True if authentication succeeded, False otherwise.
-    """
+# Secure SSL/TLS Handshake (TCP)
+def secure_handshake(client_id, server_ip, port):
     context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
-    context.check_hostname = False 
+    context.check_hostname = False       # self-signed cert used in lab
     context.verify_mode   = ssl.CERT_NONE
 
     for attempt in range(1, MAX_RETRIES + 1):
-        print(f"[*] Client {client_id}: SSL/TLS handshake attempt {attempt}/{MAX_RETRIES}...")
+        print(f"[*] Client {client_id}: SSL/TLS handshake attempt {attempt}/{MAX_RETRIES} → {server_ip}:{port}")
 
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(5)
 
         try:
-            secure_sock = context.wrap_socket(sock, server_hostname=SERVER_IP)
-            secure_sock.connect((SERVER_IP, PORT))
+            secure_sock = context.wrap_socket(sock, server_hostname=server_ip)
+            secure_sock.connect((server_ip, port))
             secure_sock.send(f"HELLO:{client_id}".encode())
 
             response = secure_sock.recv(1024).decode('utf-8', errors='ignore').strip()
@@ -66,7 +45,7 @@ def secure_handshake(client_id):
         except ssl.SSLError as e:
             print(f"[!] SSL error on attempt {attempt}: {e}")
         except ConnectionRefusedError:
-            print(f"[!] Connection refused — is the server running on {SERVER_IP}:{PORT}?")
+            print(f"[!] Connection refused — is the server running on {server_ip}:{port}?")
         except socket.timeout:
             print(f"[!] Connection timed out on attempt {attempt}.")
         except Exception as e:
@@ -82,28 +61,12 @@ def secure_handshake(client_id):
 
 
 
-# Step 2 — UDP Telemetry Stream
-
-def start_telemetry(client_id, loss_rate):
-    """
-    Continuously sends binary telemetry packets over UDP.
-
-    Simulated telemetry payload:
-        cpu  (int): Simulated CPU usage percentage (10–90).
-        temp (int): Simulated core temperature in Celsius (40–80).
-
-    Packet loss simulation:
-        With probability `loss_rate`, the packet is deliberately not sent.
-        This lets the server's sequence-gap detection be demonstrated live.
-
-    Args:
-        client_id (int): Identifies this client in every packet header.
-        loss_rate (float): Fraction of packets to drop locally (0.0–1.0).
-    """
+# UDP Telemetry Stream
+def start_telemetry(client_id, server_ip, port, loss_rate):
     udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     seq_num  = 0
 
-    print(f"[*] Client {client_id}: Starting UDP telemetry  "
+    print(f"[*] Client {client_id}: Starting UDP telemetry → {server_ip}:{port}  "
           f"(rate ~{int(1/SEND_RATE)} pps, simulated loss {loss_rate*100:.0f}%)")
 
     try:
@@ -113,7 +76,7 @@ def start_telemetry(client_id, loss_rate):
 
             if random.random() >= loss_rate:
                 try:
-                    udp_sock.sendto(packet, (SERVER_IP, PORT))
+                    udp_sock.sendto(packet, (server_ip, port))
                 except OSError as e:
                     print(f"[!] UDP send error (seq {seq_num}): {e}")
             else:
@@ -129,22 +92,44 @@ def start_telemetry(client_id, loss_rate):
 
 
 
-# Entry Point
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Telemetry client — authenticates via SSL/TLS then streams UDP data."
+        description="Telemetry client — authenticates via SSL/TLS then streams UDP data.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    parser.add_argument("client_id", type=int,   help="Unique integer client ID (e.g. 101)")
-    parser.add_argument("--loss",    type=float, default=0.0,
-                        help="Fraction of packets to drop locally, 0.0–1.0 (default: 0.0)")
+    parser.add_argument("client_id",
+                        type=int,
+                        help="Unique integer client ID (e.g. 101)")
+    parser.add_argument("--server",
+                        type=str,
+                        default=DEFAULT_SERVER_IP,
+                        metavar="IP",
+                        help="IP address of the server. "
+                             "When running on a separate machine over a shared hotspot, "
+                             "pass the server machine's LAN IP here "
+                             "(find it with: ip addr  /  ifconfig  /  ipconfig).")
+    parser.add_argument("--port",
+                        type=int,
+                        default=DEFAULT_PORT,
+                        help="Server port number.")
+    parser.add_argument("--loss",
+                        type=float,
+                        default=0.0,
+                        metavar="RATE",
+                        help="Fraction of packets to drop locally, 0.0–1.0.")
     args = parser.parse_args()
 
     if not (0.0 <= args.loss <= 1.0):
         print("[!] --loss must be between 0.0 and 1.0")
         sys.exit(1)
 
-    if secure_handshake(args.client_id):
-        start_telemetry(args.client_id, args.loss)
+    print(f"[*] Server target : {args.server}:{args.port}")
+    print(f"[*] Client ID     : {args.client_id}")
+    print(f"[*] Simulated loss: {args.loss*100:.0f}%")
+    print("-" * 50)
+
+    if secure_handshake(args.client_id, args.server, args.port):
+        start_telemetry(args.client_id, args.server, args.port, args.loss)
     else:
         sys.exit(1)
