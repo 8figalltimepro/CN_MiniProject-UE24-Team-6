@@ -5,6 +5,8 @@ import random
 import sys
 import argparse
 import protocol
+import psutil
+import platform
 
 # Defaults (overridable via CLI arguments)
 DEFAULT_SERVER_IP = '127.0.0.1'
@@ -66,12 +68,48 @@ def start_telemetry(client_id, server_ip, port, loss_rate):
     udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     seq_num  = 0
 
+    os_name = platform.system()
+    if os_name == 'Darwin':
+        os_name = 'macOS'
+
     print(f"[*] Client {client_id}: Starting UDP telemetry → {server_ip}:{port}  "
           f"(rate ~{int(1/SEND_RATE)} pps, simulated loss {loss_rate*100:.0f}%)")
 
+    # Prime cpu_percent so the first reading is valid
+    psutil.cpu_percent(interval=None)
+
     try:
         while True:
-            data   = {"cpu": random.randint(10, 90), "temp": random.randint(40, 80)}
+            net_io = psutil.net_io_counters()
+            os_info = {
+                "os": os_name,
+                "os_release": platform.release(),
+                "os_version": platform.version(),
+                "machine": platform.machine(),
+            }
+
+            if os_name == 'Windows':
+                win_ver = platform.win32_ver()
+                os_info["os_version"] = win_ver[0] or os_info["os_version"]
+                os_info["os_build"] = win_ver[2]
+            elif os_name == 'macOS':
+                mac_ver = platform.mac_ver()[0]
+                if mac_ver:
+                    os_info["os_version"] = mac_ver
+            elif os_name == 'Linux':
+                os_info["os_version"] = platform.uname().release
+
+            data = {
+                **os_info,
+                "cpu_percent": psutil.cpu_percent(interval=None),
+                "memory_percent": psutil.virtual_memory().percent,
+                "disk_percent": psutil.disk_usage('/').percent,
+                "uptime_seconds": int(time.time() - psutil.boot_time()),
+                "process_count": len(psutil.pids()),
+                "network_bytes_received": net_io.bytes_recv,
+                "network_bytes_sent": net_io.bytes_sent,
+            }
+
             packet = protocol.create_packet(client_id, seq_num, data)
 
             if random.random() >= loss_rate:
